@@ -4,6 +4,7 @@
 
 #ifdef ENABLE_GUI
 #include <SFML/Graphics.hpp>
+#include <SFML/Window.hpp>
 #endif
 
 class GUIRenderer : public Renderer {
