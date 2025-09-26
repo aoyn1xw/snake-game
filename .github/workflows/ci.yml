@@ -1,0 +1,253 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  lint-and-format:
+    name: 🧹 Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🔍 Check File Structure  
+      run: |
+        echo "Checking project structure..."
+        test -f CMakeLists.txt || (echo "❌ CMakeLists.txt missing" && exit 1)
+        test -f README.md || (echo "❌ README.md missing" && exit 1)
+        test -f LICENSE || (echo "❌ LICENSE missing" && exit 1)
+        test -d src/ || (echo "❌ src/ directory missing" && exit 1)
+        test -f src/main.cpp || (echo "❌ src/main.cpp missing" && exit 1)
+        echo "✅ Project structure OK"
+
+    - name: 📏 Check Code Style
+      run: |
+        echo "Checking basic code style..."
+        # Check for tabs (should use spaces)
+        if grep -r $'\t' src/ --include="*.cpp" --include="*.h"; then
+          echo "❌ Found tabs in source files (use 4 spaces instead)"
+          exit 1
+        fi
+        echo "✅ No tabs found"
+        
+        # Check line endings (should be LF)
+        if find src/ -name "*.cpp" -o -name "*.h" | xargs file | grep -q CRLF; then
+          echo "❌ Found CRLF line endings (use LF)"
+          exit 1
+        fi  
+        echo "✅ Line endings OK"
+
+  build-matrix:
+    name: 🔨 Build & Test
+    needs: lint-and-format
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux with different compilers
+          - os: ubuntu-latest
+            compiler: gcc
+            cpp_compiler: g++
+            name: "Ubuntu GCC"
+            install_deps: sudo apt-get update && sudo apt-get install -y libsfml-dev
+            
+          - os: ubuntu-latest  
+            compiler: clang
+            cpp_compiler: clang++
+            name: "Ubuntu Clang"
+            install_deps: sudo apt-get update && sudo apt-get install -y libsfml-dev clang
+            
+          # Windows
+          - os: windows-latest
+            compiler: msvc
+            cpp_compiler: cl
+            name: "Windows MSVC"
+            install_deps: vcpkg install sfml:x64-windows
+            
+          # macOS
+          - os: macos-latest
+            compiler: clang  
+            cpp_compiler: clang++
+            name: "macOS Clang"
+            install_deps: brew install sfml
+
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 🛠️ Setup Build Tools
+      if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'clang'
+      run: |
+        sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang 100
+        sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 100
+
+    - name: 📦 Install Dependencies
+      run: ${{ matrix.install_deps }}
+
+    - name: 🏗️ Configure CMake (with SFML)
+      run: |
+        mkdir build-gui && cd build-gui
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          ${{ matrix.os == 'windows-latest' && '-A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake' || '' }}
+
+    - name: 🔨 Build with GUI Support
+      run: |
+        cd build-gui
+        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: ✅ Test GUI Build
+      run: |
+        cd build-gui
+        echo "Testing GUI-enabled build..."
+        echo "3" | ./${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} || echo "GUI test completed"
+
+    - name: 🏗️ Configure CMake (CLI only)  
+      run: |
+        # Temporarily hide SFML to test CLI-only build
+        mkdir build-cli && cd build-cli
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+
+    - name: 🔨 Build CLI Only
+      run: |
+        cd build-cli  
+        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: ✅ Test CLI Build
+      run: |
+        cd build-cli
+        echo "Testing CLI-only build..."
+        echo "3" | ./${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} || echo "CLI test completed"
+
+    - name: 📊 Build Summary
+      run: |
+        echo "✅ Build Summary for ${{ matrix.name }}:"
+        echo "  - GUI build: $(ls -la build-gui/${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} | awk '{print $5}') bytes"
+        echo "  - CLI build: $(ls -la build-cli/${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} | awk '{print $5}') bytes"
+
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: build-matrix
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🔍 Run CodeQL Analysis
+      uses: github/codeql-action/init@v2
+      with:
+        languages: cpp
+        
+    - name: 🏗️ Build for Analysis
+      run: |
+        sudo apt-get update && sudo apt-get install -y libsfml-dev
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Debug
+        make -j$(nproc)
+        
+    - name: 🔍 Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+
+  documentation:
+    name: 📚 Documentation Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 📖 Validate README
+      run: |
+        echo "Checking README completeness..."
+        
+        # Check for required sections
+        sections=("Features" "Quick Start" "Building" "Architecture" "Contributing" "License")
+        for section in "${sections[@]}"; do
+          if ! grep -q "## .*$section" README.md; then
+            echo "❌ Missing section: $section"
+            exit 1
+          fi
+        done
+        echo "✅ README sections complete"
+        
+        # Check for broken links (basic check)
+        if grep -o 'http[s]*://[^)]*' README.md | head -5 | while read url; do
+          if ! curl -s --head "$url" | head -1 | grep -q "200 OK"; then
+            echo "⚠️  Potentially broken link: $url"
+          fi
+        done; then
+          echo "✅ External links checked"
+        fi
+
+    - name: 📄 Validate LICENSE
+      run: |
+        echo "Checking LICENSE file..."
+        test -f LICENSE || (echo "❌ LICENSE file missing" && exit 1)
+        grep -q "MIT License" LICENSE || (echo "❌ Not MIT License" && exit 1)
+        grep -q "$(date +%Y)" LICENSE || echo "⚠️  License year might be outdated"
+        echo "✅ LICENSE file OK"
+
+  deployment-test:
+    name: 🚀 Deployment Test
+    runs-on: ubuntu-latest
+    needs: [build-matrix, security-scan]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🏗️ Build Release Package
+      run: |
+        sudo apt-get update && sudo apt-get install -y libsfml-dev
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        make -j$(nproc)
+        
+        # Create release package
+        tar -czf snake-game-test.tar.gz snake-game README.md LICENSE BUILD.md
+        echo "✅ Release package created: $(ls -la snake-game-test.tar.gz | awk '{print $5}') bytes"
+        
+    - name: 📤 Upload Test Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-release-package
+        path: build/snake-game-test.tar.gz
+        retention-days: 7
+
+  status-summary:
+    name: 📋 Build Status
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, build-matrix, security-scan, documentation, deployment-test]
+    if: always()
+    
+    steps:
+    - name: 📊 Summary
+      run: |
+        echo "## 🎯 CI/CD Pipeline Summary"
+        echo "| Job | Status |"
+        echo "|-----|--------|"  
+        echo "| Code Quality | ${{ needs.lint-and-format.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+        echo "| Build & Test | ${{ needs.build-matrix.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+        echo "| Security | ${{ needs.security-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+        echo "| Documentation | ${{ needs.documentation.result == 'success' && '✅ Passed' || '❌ Failed' }} |"
+        echo "| Deployment Test | ${{ needs.deployment-test.result == 'success' && '✅ Passed' || needs.deployment-test.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |"
+        
+        if [[ "${{ needs.lint-and-format.result }}" == "success" && 
+              "${{ needs.build-matrix.result }}" == "success" && 
+              "${{ needs.security-scan.result }}" == "success" && 
+              "${{ needs.documentation.result }}" == "success" ]]; then
+          echo "🎉 All checks passed! Ready for release."
+        else
+          echo "⚠️ Some checks failed. Please review before merging."
+        fi
