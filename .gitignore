@@ -4,6 +4,7 @@
 build/
 Build/
 BUILD/
+test-build/
 
 # CMake generated files
 CMakeCache.txt
