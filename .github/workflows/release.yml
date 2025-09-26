@@ -77,8 +77,13 @@ jobs:
 
     - name: ⚙️ Configure CMake
       working-directory: build
-      run: |
-        ${{ matrix.os == 'windows-latest' && 'cmake .. -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake' || 'cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -G "${{ matrix.cmake_generator }}"' }}
+      run: cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -G "${{ matrix.cmake_generator }}"
+      if: matrix.os != 'windows-latest'
+
+    - name: ⚙️ Configure CMake - Windows
+      working-directory: build
+      run: cmake .. -DCMAKE_BUILD_TYPE=Release -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+      if: matrix.os == 'windows-latest'
 
     - name: 🔨 Build Project
       working-directory: build  
@@ -88,7 +93,17 @@ jobs:
       working-directory: build
       run: |
         echo "Testing executable..."
-        echo "3" | ./${{ matrix.executable_name }} || echo "Test completed (expected exit)"
+        echo "3" | ./snake-game || echo "Test completed (expected exit)"
+      if: matrix.os != 'windows-latest'
+
+    - name: ✅ Test Executable - Windows  
+      working-directory: build
+      run: |
+        echo "Testing executable..."
+        echo "3" | .\Release\snake-game.exe
+        if ($LASTEXITCODE -ne 0) { echo "Test completed (expected exit)" }
+      shell: pwsh
+      if: matrix.os == 'windows-latest'
 
     - name: 📦 Package Release
       working-directory: build
