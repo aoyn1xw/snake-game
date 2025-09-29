@@ -8,8 +8,8 @@ echo "=== Testing CI/CD fixes ==="
 # Test 1: Basic build
 echo "1. Testing basic build..."
 mkdir -p test-build && cd test-build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+cmake .. -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1
+make -j$(nproc) >/dev/null 2>&1
 echo "✅ Build successful"
 
 # Test 2: Test executable

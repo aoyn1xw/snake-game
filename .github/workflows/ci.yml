@@ -100,45 +100,98 @@ jobs:
     - name: 📦 Install Dependencies
       run: ${{ matrix.install_deps }}
 
-    - name: 🏗️ Configure CMake (with SFML)
+    - name: 🏗️ Configure CMake (with SFML) - Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        mkdir build-gui
+        cd build-gui
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+    - name: 🏗️ Configure CMake (with SFML) - Unix
+      if: matrix.os != 'windows-latest'
       run: |
         mkdir build-gui && cd build-gui
-        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-          ${{ matrix.os == 'windows-latest' && '-A x64 -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake' || '' }}
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
 
-    - name: 🔨 Build with GUI Support
+    - name: 🔨 Build with GUI Support - Windows
+      if: matrix.os == 'windows-latest'
       run: |
         cd build-gui
         cmake --build . --config ${{ env.BUILD_TYPE }} --parallel
 
-    - name: ✅ Test GUI Build
+    - name: 🔨 Build with GUI Support - Unix
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd build-gui
+        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: ✅ Test GUI Build - Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd build-gui
+        echo "3" | ./Release/snake-game.exe
+      shell: pwsh
+
+    - name: ✅ Test GUI Build - Unix
+      if: matrix.os != 'windows-latest'
       run: |
         cd build-gui
         echo "Testing GUI-enabled build..."
-        echo "3" | ./${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} || echo "GUI test completed"
+        echo "3" | ./snake-game || echo "GUI test completed"
 
-    - name: 🏗️ Configure CMake (CLI only)  
+    - name: 🏗️ Configure CMake (CLI only) - Windows
+      if: matrix.os == 'windows-latest'
       run: |
-        # Temporarily hide SFML to test CLI-only build
+        mkdir build-cli
+        cd build-cli
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -A x64
+
+    - name: 🏗️ Configure CMake (CLI only) - Unix
+      if: matrix.os != 'windows-latest'
+      run: |
         mkdir build-cli && cd build-cli
         cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
 
-    - name: 🔨 Build CLI Only
+    - name: 🔨 Build CLI Only - Windows
+      if: matrix.os == 'windows-latest'
       run: |
-        cd build-cli  
+        cd build-cli
         cmake --build . --config ${{ env.BUILD_TYPE }} --parallel
 
-    - name: ✅ Test CLI Build
+    - name: 🔨 Build CLI Only - Unix
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd build-cli
+        cmake --build . --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: ✅ Test CLI Build - Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd build-cli
+        echo "3" | ./Release/snake-game.exe
+      shell: pwsh
+
+    - name: ✅ Test CLI Build - Unix
+      if: matrix.os != 'windows-latest'
       run: |
         cd build-cli
         echo "Testing CLI-only build..."
-        echo "3" | ./${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} || echo "CLI test completed"
+        echo "3" | ./snake-game || echo "CLI test completed"
 
-    - name: 📊 Build Summary
+    - name: 📊 Build Summary - Windows
+      if: matrix.os == 'windows-latest'
       run: |
         echo "✅ Build Summary for ${{ matrix.name }}:"
-        echo "  - GUI build: $(ls -la build-gui/${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} | awk '{print $5}') bytes"
-        echo "  - CLI build: $(ls -la build-cli/${{ matrix.os == 'windows-latest' && 'Release/' || '' }}snake-game${{ matrix.os == 'windows-latest' && '.exe' || '' }} | awk '{print $5}') bytes"
+        echo "  - GUI build: $(Get-ChildItem build-gui/Release/snake-game.exe | Select-Object -ExpandProperty Length) bytes"
+        echo "  - CLI build: $(Get-ChildItem build-cli/Release/snake-game.exe | Select-Object -ExpandProperty Length) bytes"
+      shell: pwsh
+
+    - name: 📊 Build Summary - Unix
+      if: matrix.os != 'windows-latest'
+      run: |
+        echo "✅ Build Summary for ${{ matrix.name }}:"
+        echo "  - GUI build: $(ls -la build-gui/snake-game | awk '{print $5}') bytes"
+        echo "  - CLI build: $(ls -la build-cli/snake-game | awk '{print $5}') bytes"
 
   security-scan:
     name: 🔒 Security Scan
