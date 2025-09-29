@@ -29,18 +29,23 @@ if(PkgConfig_FOUND)
     pkg_check_modules(SFML sfml-all)
 endif()
 
+# Modern CMake SFML detection (SFML 2.5+)
 if(NOT SFML_FOUND)
-    find_package(sfml-graphics)
-    find_package(sfml-window)
-    find_package(sfml-system)
-    
-    if(sfml-graphics_FOUND AND sfml-window_FOUND AND sfml-system_FOUND)
-        set(SFML_FOUND TRUE)
+    find_package(SFML 2.5 COMPONENTS graphics window system QUIET)
+    if(SFML_FOUND)
         set(SFML_LIBRARIES sfml-graphics sfml-window sfml-system)
     endif()
 endif()
 
-# Alternative: try to find SFML manually
+# Try SFML 3.x
+if(NOT SFML_FOUND)
+    find_package(SFML 3 COMPONENTS Graphics Window System QUIET)
+    if(SFML_FOUND)
+        set(SFML_LIBRARIES SFML::Graphics SFML::Window SFML::System)
+    endif()
+endif()
+
+# Legacy SFML detection for older systems
 if(NOT SFML_FOUND)
     find_path(SFML_INCLUDE_DIR SFML/Graphics.hpp
         PATHS

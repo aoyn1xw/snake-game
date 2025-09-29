@@ -6,7 +6,7 @@ SnakeGame::SnakeGame()
     , nextDirection(Direction::RIGHT)
     , gameOver(false)
     , score(0)
-    , rng(std::chrono::steady_clock::now().time_since_epoch().count())
+    , rng(static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()))
     , xDist(0, BOARD_WIDTH - 1)
     , yDist(0, BOARD_HEIGHT - 1)
 {
